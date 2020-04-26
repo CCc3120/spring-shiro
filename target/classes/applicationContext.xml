@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<!-- 安全管理器 -->
+	<bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+		<!-- 配置第三方缓存管理器 -->
+		<property name="cacheManager" ref="shiroCacheManager" />
+		<!-- 单个realm配置 -->
+		<!-- <property name="realm" ref="userRealm" /> -->
+		<!-- 多个realm配置 -->
+		<property name="authenticator" ref="authenticator"></property>
+		<property name="realms">
+			<list>
+				<ref bean="userRealm"/>
+				<ref bean="userRealmSe"/>
+			</list>
+		</property>
+		<!-- Session管理器 -->
+		<property name="sessionManager" ref="sessionManager"></property>
+		<!-- rememberMe 单位秒 -->
+		<property name="rememberMeManager.cookie.maxAge" value="10" />
+	</bean>
+	
+	<!-- 会话管理器 -->
+	<bean id="sessionManager" class="org.apache.shiro.web.session.mgt.DefaultWebSessionManager">
+		<!-- session的失效时长，单位毫秒 -->
+		<property name="globalSessionTimeout" value="600000" />
+		<!-- 删除失效的session -->
+		<property name="deleteInvalidSessions" value="true" />
+		<property name="sessionValidationSchedulerEnabled" value="true"></property>
+		<!-- <property name="sessionDAO" ref="sessionDAO"></property> -->
+	</bean>
+	
+	<!-- <bean id="sessionDAO" class="com.bingo.shiro.MySessionDao">
+		<property name="activeSessionsCacheName" value="shiro-activeSessionsCache"></property>
+		<property name="sessionIdGenerator" ref="sessionIdGenerator"></property>
+	</bean>
+	
+	<bean id="sessionIdGenerator" class="org.apache.shiro.session.mgt.eis.JavaUuidSessionIdGenerator"></bean> -->
+	
+	<!-- 缓存配置 -->
+	<bean id="shiroCacheManager" class="org.apache.shiro.cache.ehcache.EhCacheManager">
+		<property name="cacheManagerConfigFile" value="classpath:shiro-ehcache.xml" />
+	</bean>
+	
+	<bean id="authenticator" class="org.apache.shiro.authc.pam.ModularRealmAuthenticator">
+		<!-- 多个realm配置 -->
+		<!-- <property name="realms">
+			<list>
+				<ref bean="userRealm"/>
+				<ref bean="userRealmSe"/>
+			</list>
+		</property> -->
+		<!-- 认证策略 -->
+		<property name="authenticationStrategy">
+			<!-- 所有realms都成功 -->
+			<!-- <bean class="org.apache.shiro.authc.pam.AllSuccessfulStrategy"></bean> -->
+			<!-- 一个成功即可,只返回第一个realm认证成功的信息 -->
+			<!-- <bean class="org.apache.shiro.authc.pam.FirstSuccessfulStrategy"></bean> -->
+			<!-- 一个成功即可,返回所有成功的realm信息 -->
+			<bean class="org.apache.shiro.authc.pam.AtLeastOneSuccessfulStrategy"></bean>
+		</property>
+	</bean>
+
+	<!-- 自定义 realm 从数据库中获取 认证信息 和授权信息 -->
+	<bean id="userRealm" class="com.bingo.shiro.CustomRealm" >
+		<!-- 密码匹配器 -->
+		<property name="credentialsMatcher">
+			<bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+				<!-- 加密方式 -->
+				<property name="hashAlgorithmName" value="MD5"></property>
+				<!-- 加密次数 -->
+				<property name="hashIterations" value="1024"></property>
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="userRealmSe" class="com.bingo.shiro.CustomRealm2" >
+		<!-- 密码匹配器 -->
+		<property name="credentialsMatcher">
+			<bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+				<!-- 加密方式 -->
+				<property name="hashAlgorithmName" value="SHA1"></property>
+				<!-- 加密次数 -->
+				<property name="hashIterations" value="1024"></property>
+			</bean>
+		</property>
+	</bean>
+
+	<!-- 可以自定配置调用配置在spring ioc 容器中shiro bean 的生命周期方法 -->
+	<bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"></bean>
+
+	<bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator" depends-on="lifecycleBeanPostProcessor"></bean>
+	<!-- 开启shiro注解支持 -->
+	<bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">
+		<property name="securityManager" ref="securityManager"/>
+	</bean>
+
+	<!-- Shiro 的Web过滤器 -->
+	<bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+		<property name="securityManager" ref="securityManager" />
+		<!-- loginUrl认证提交地址，如果没有认证将会请求此地址进行认证，请求此地址将由formAuthenticationFilter进行表单认证 -->
+		<property name="loginUrl" value="/login.jsp" />
+		<!-- 认证成功统一跳转到first.action，建议不配置，shiro认证成功自动到上一个请求路径 -->
+		<property name="successUrl" value="/list.jsp" />
+		<!-- 没有权限 -->
+		<property name="unauthorizedUrl" value="/unauthorized.jsp" />
+		<!-- 自定义表单验证 -->
+		<!-- <property name="filters">
+			<map>
+				<entry key="authc" value-ref="myShiroFilter"></entry>
+			</map>
+		</property> -->
+		<!-- 过滤器链 -->
+		<!-- <property name="filterChainDefinitions">
+			<value>
+				/index.jsp = anon
+				/user/login = anon
+				/user/logout = logout
+				
+				/User.jsp = roles[user]
+				/admin.jsp = roles[admin]
+				
+				/** = authc
+			</value>
+		</property> -->
+		<!-- 过滤器链替换成数据库存储数据 -->
+		<property name="filterChainDefinitionMap" ref="filterChainDefinitionMap"></property>
+	</bean>
+	<!-- 配置一个bean,该bean实际上是一个Map,通过实例工厂方法的方式实现 -->
+	<bean id="filterChainDefinitionMap" 
+		factory-bean="filterChainDefinitionsMapBuilder" 
+		factory-method="buildFilterChainDefinitionsMap"></bean>
+	<bean id="filterChainDefinitionsMapBuilder" 
+		class="com.bingo.shiro.FilterChainDefinitionsMapBuilder"></bean>
+		
+	<!-- 自定义表单验证 -->
+	<!-- <bean id="myShiroFilter" class="com.bingo.filter.MyShiroFilter">
+		<property name="usernameParam" value="username"></property>
+		<property name="passwordParam" value="password"></property>
+		<property name="rememberMeParam" value="remberMe"></property>
+	</bean> -->
+	
+</beans>
